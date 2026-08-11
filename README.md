@@ -112,7 +112,7 @@ When the demo starts, it prints a dashboard URL like:
 http://<IQ9_LAN_IP>:8081/
 ```
 
-Open that URL from any machine on the same network to see a live website with three streams and per-topic FPS: raw camera (`/image_raw`), MiDaS depth (`/midas_depth_gray`), and MiDaS + YOLO overlay (`/midas_yolo_overlay`). The dashboard uses default/reliable QoS for the `usb_cam` camera stream and `sensor_data` QoS for MiDaS/YOLO output streams. The underlying stream server is still available at:
+Open that URL from any machine on the same network to see a live website with three streams and true fused-pipeline FPS: raw camera (`/image_raw`), MiDaS depth (`/midas_depth_gray`), and MiDaS + YOLO overlay (`/midas_yolo_overlay`). The dashboard uses default/reliable QoS for the `usb_cam` camera stream and `sensor_data` QoS for MiDaS/YOLO output streams. The underlying stream server is still available at:
 
 ```text
 http://<IQ9_LAN_IP>:8080/
@@ -140,7 +140,7 @@ The workshop should stay command-light. Attendees run the scripts and inspect RO
 | Run `setup_iq9_workshop.sh` | Full apt package list, ROS apt key setup, Qualcomm PPA setup, QIRP setup script sourcing. |
 | Run `prepare_demo_workspace.sh` | PR checkout, `qrb_ros_nn_inference` PR #93 pin, XML manifest patch, model copy to `/opt/model`, colcon package selection. |
 | Run `check_demo_prereqs.sh` | Exact package/component/camera checks. |
-| Run `run_usb_demo.sh`, open the printed dashboard URL, and inspect ROS topics | ROS environment sourcing, robust USB camera capture-node selection, dashboard website with FPS, and HTTP image streaming. |
+| Run `run_usb_demo.sh`, open the printed dashboard URL, and inspect ROS topics | ROS environment sourcing, robust USB camera capture-node selection, dashboard website with true pipeline FPS, and HTTP image streaming. |
 
 The useful live learning moments are the Qualcomm PPA/QIRP concept, ROS overlay build concept, readiness checks, and the running ROS graph. The fork pin, XML patch, and model staging are necessary plumbing, not attendee exercises.
 
@@ -153,7 +153,7 @@ For the workshop, start each long-running command first, then explain it while i
 | `./scripts/setup_iq9_workshop.sh` | Board prep: Qualcomm PPAs, ROS 2 Jazzy tools, QIRP/QRB ROS packages, QNN/camera/runtime dependencies, web video server. |
 | `./scripts/prepare_demo_workspace.sh` | ROS overlay: QRB ROS Samples PR #429 plus pinned `qrb_ros_nn_inference` PR #93 for `QrbRosSharedInferenceNode`, model staging, and `colcon build`. |
 | `./scripts/check_demo_prereqs.sh` | Demo gate: model exists, packages are visible, shared inference component and web video server are registered, launch args parse, USB camera is detected. |
-| `./scripts/run_usb_demo.sh` | Launch wrapper: source ROS/overlay, auto-detect the real USB capture node even when `/dev/video*` ordering changes, start the live dashboard website, start the ROS image stream server, run the sample; then inspect the dashboard FPS/nodes/topics/rates. |
+| `./scripts/run_usb_demo.sh` | Launch wrapper: source ROS/overlay, auto-detect the real USB capture node even when `/dev/video*` ordering changes, start the live dashboard website, start the ROS image stream server, run the sample; then inspect the dashboard pipeline FPS/nodes/topics/rates. |
 
 ## Inspect the running ROS graph
 
@@ -181,7 +181,7 @@ Expected demo topics include:
 
 `run_usb_demo.sh` starts two HTTP services by default:
 
-- IQ9 dashboard website on `0.0.0.0:8081`, showing `/image_raw`, `/midas_depth_gray`, `/midas_yolo_overlay`, and live FPS for each displayed topic.
+- IQ9 dashboard website on `0.0.0.0:8081`, showing `/image_raw`, `/midas_depth_gray`, `/midas_yolo_overlay`, and true fused-pipeline FPS.
 - ROS 2 `web_video_server` on `0.0.0.0:8080`, serving the underlying MJPEG streams.
 
 Use the printed dashboard URL to watch the raw camera, MiDaS depth, and MiDaS + YOLO overlay from a laptop on the same network as the IQ9.
