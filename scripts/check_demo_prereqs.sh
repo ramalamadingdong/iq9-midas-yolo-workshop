@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKSHOP_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 DEMO_REPO_DIR="${DEMO_REPO_DIR:-$WORKSHOP_ROOT/qrb_ros_samples}"
+NN_REPO_DIR="${NN_REPO_DIR:-$DEMO_REPO_DIR/qrb_ros_nn_inference}"
 MODEL_SRC="$REPO_ROOT/models/midas_yolo_combined_int8_split.bin"
 MODEL_DST=/opt/model/midas_yolo_combined_int8_split.bin
 
@@ -24,6 +25,7 @@ check() {
 check "local model exists" test -f "$MODEL_SRC"
 check "launch model exists" test -f "$MODEL_DST"
 check "qrb_ros_samples checkout exists" test -d "$DEMO_REPO_DIR/.git"
+check "qrb_ros_nn_inference source checkout exists" test -d "$NN_REPO_DIR/.git"
 
 # shellcheck disable=SC1091
 set +u
@@ -40,10 +42,28 @@ else
 fi
 
 check "sample package visible" ros2 pkg prefix sample_midas_yolo_parallel
+check "web video server package visible" ros2 pkg prefix web_video_server
+check "web dashboard script present" test -f "$REPO_ROOT/scripts/iq9_web_dashboard.py"
+check "shared inference component visible" bash -lc 'ros2 component types | python3 -c "import sys; sys.exit(0 if any(\"QrbRosSharedInferenceNode\" in line for line in sys.stdin) else 1)"'
 check "USB launch arguments parse" ros2 launch sample_midas_yolo_parallel launch_with_usb_cam.py --show-args
 
-if compgen -G '/dev/video*' >/dev/null; then
-  echo "INFO: V4L video nodes exist; confirm the USB camera path before launch"
+usb_camera=$(python3 - <<'PY'
+from pathlib import Path
+
+for node in sorted(Path('/sys/class/video4linux').glob('video*')):
+    device = (node / 'device').resolve()
+    name_path = node / 'name'
+    name = name_path.read_text().strip() if name_path.exists() else ''
+    if '/usb' in str(device) and name:
+        print(f'/dev/{node.name} ({name})')
+        break
+PY
+)
+if [ -n "$usb_camera" ]; then
+  echo "PASS: USB camera detected at $usb_camera"
+  v4l2-ctl --list-devices || true
+elif compgen -G '/dev/video*' >/dev/null; then
+  echo "WARN: V4L video nodes exist, but no USB camera was identified"
   v4l2-ctl --list-devices || true
 else
   echo "WARN: no /dev/video* devices found; plug the USB camera before the live demo"

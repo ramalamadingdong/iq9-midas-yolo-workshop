@@ -38,8 +38,13 @@ sudo apt install -y \
   ros-jazzy-cv-bridge \
   ros-jazzy-usb-cam \
   ros-jazzy-image-transport-plugins \
+  ros-jazzy-web-video-server \
   python3-numpy \
   libopencv-dev \
+  libqnn-dev \
+  libqnn1 \
+  libtensorflow-lite-c-qcom1 \
+  libtensorflow-lite-qcom-dev \
   v4l-utils \
   git
 
@@ -51,5 +56,5 @@ if [ -f /usr/share/qirp-setup.sh ]; then
   source /usr/share/qirp-setup.sh || true
   set -u
 fi
-
 echo "IQ9 workshop dependencies installed."
+echo "Browser output viewer dependency installed: ros-jazzy-web-video-server."

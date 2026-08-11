@@ -27,7 +27,7 @@ MidasYoloFusionNode
 /midas_yolo_overlay
 ```
 
-The demo source comes from Qualcomm QRB ROS Samples PR #429: `sample_midas_yolo_parallel`.
+The demo source comes from Qualcomm QRB ROS Samples PR #429: `sample_midas_yolo_parallel`. It also builds `qrb_ros_nn_inference` PR #93 because released `/opt/ros/jazzy` packages do not yet include `QrbRosSharedInferenceNode`.
 
 ## Why this is a QRB ROS workshop
 
@@ -47,9 +47,9 @@ This workshop uses a USB camera for accessibility. Production IQ9 camera paths c
 ```text
 models/midas_yolo_combined_int8_split.bin   # included QNN context binary
 scripts/setup_iq9_workshop.sh               # install ROS/QIRP/QRB ROS dependencies
-scripts/prepare_demo_workspace.sh           # fetch PR #429, stage model, build sample
-scripts/check_demo_prereqs.sh               # verify model, ROS package, launch args, camera nodes
-scripts/run_usb_demo.sh                     # source the workspace and launch the USB-camera demo
+scripts/prepare_demo_workspace.sh           # fetch PR #429 + qrb_ros_nn_inference PR #93, stage model, build overlay
+scripts/check_demo_prereqs.sh               # verify model, ROS packages, launch args, camera nodes
+scripts/run_usb_demo.sh                     # launch the USB-camera demo plus browser web viewer
 ```
 
 No slide/runbook docs are included in this attendee repo.
@@ -78,7 +78,7 @@ Install dependencies:
 ./scripts/setup_iq9_workshop.sh
 ```
 
-Prepare the QRB ROS sample workspace and build the demo package:
+Prepare the QRB ROS sample workspace, pin the shared-inference dependency, and build the overlay:
 
 ```bash
 ./scripts/prepare_demo_workspace.sh
@@ -96,13 +96,61 @@ Run the USB-camera demo:
 ./scripts/run_usb_demo.sh
 ```
 
-If the USB camera is not `/dev/video0`, pass the detected device:
+The helper auto-detects the first USB-backed `/dev/video*` node. To override it manually:
 
 ```bash
 ./scripts/run_usb_demo.sh video_device:=/dev/video2
 ```
 
-The helper script is equivalent to sourcing ROS, sourcing the built QRB ROS sample workspace, and running `ros2 launch sample_midas_yolo_parallel launch_with_usb_cam.py`.
+The helper script is equivalent to sourcing ROS, sourcing the built overlay workspace, selecting the USB camera, starting `web_video_server`, starting the IQ9 dashboard website, and running `ros2 launch sample_midas_yolo_parallel launch_with_usb_cam.py`.
+
+When the demo starts, it prints a dashboard URL like:
+
+```text
+http://<IQ9_LAN_IP>:8081/
+```
+
+Open that URL from any machine on the same network to see a live website with three streams: raw camera (`/image_raw`), MiDaS depth (`/midas_depth_gray`), and MiDaS + YOLO overlay (`/midas_yolo_overlay`). The dashboard embeds `web_video_server` streams with `qos_profile=sensor_data` for camera/image publishers. The underlying stream server is still available at:
+
+```text
+http://<IQ9_LAN_IP>:8080/
+```
+
+Optional web-viewer overrides:
+
+```bash
+WEB_VIEWER=0 ./scripts/run_usb_demo.sh                         # disable HTTP output
+WEB_DASHBOARD_PORT=8082 ./scripts/run_usb_demo.sh              # change the dashboard website port
+WEB_VIEWER_PORT=8081 ./scripts/run_usb_demo.sh                 # change the ROS image stream port
+WEB_CAMERA_TOPIC=/image_raw ./scripts/run_usb_demo.sh          # change the camera panel topic
+WEB_DEPTH_TOPIC=/midas_depth_gray ./scripts/run_usb_demo.sh    # change the depth panel topic
+WEB_VIEWER_TOPIC=/midas_yolo_overlay ./scripts/run_usb_demo.sh # change the overlay panel topic
+WEB_VIEWER_QOS_PROFILE=default ./scripts/run_usb_demo.sh       # change stream QoS query
+```
+
+## What attendees do vs what scripts hide
+
+The workshop should stay command-light. Attendees run the scripts and inspect ROS; the scripts handle slow or typo-prone plumbing.
+
+| Attendees do | Scripts hide |
+| --- | --- |
+| Run `setup_iq9_workshop.sh` | Full apt package list, ROS apt key setup, Qualcomm PPA setup, QIRP setup script sourcing. |
+| Run `prepare_demo_workspace.sh` | PR checkout, `qrb_ros_nn_inference` PR #93 pin, XML manifest patch, model copy to `/opt/model`, colcon package selection. |
+| Run `check_demo_prereqs.sh` | Exact package/component/camera checks. |
+| Run `run_usb_demo.sh`, open the printed dashboard URL, and inspect ROS topics | ROS environment sourcing, USB camera auto-detection, dashboard website, and HTTP image streaming. |
+
+The useful live learning moments are the Qualcomm PPA/QIRP concept, ROS overlay build concept, readiness checks, and the running ROS graph. The fork pin, XML patch, and model staging are necessary plumbing, not attendee exercises.
+
+## Live facilitation pattern
+
+For the workshop, start each long-running command first, then explain it while it runs:
+
+| Start this command | Talk track while it runs |
+| --- | --- |
+| `./scripts/setup_iq9_workshop.sh` | Board prep: Qualcomm PPAs, ROS 2 Jazzy tools, QIRP/QRB ROS packages, QNN/camera/runtime dependencies, web video server. |
+| `./scripts/prepare_demo_workspace.sh` | ROS overlay: QRB ROS Samples PR #429 plus pinned `qrb_ros_nn_inference` PR #93 for `QrbRosSharedInferenceNode`, model staging, and `colcon build`. |
+| `./scripts/check_demo_prereqs.sh` | Demo gate: model exists, packages are visible, shared inference component and web video server are registered, launch args parse, USB camera is detected. |
+| `./scripts/run_usb_demo.sh` | Launch wrapper: source ROS/overlay, auto-detect USB camera, start the live dashboard website, start the ROS image stream server, run the sample; then inspect the dashboard/nodes/topics/rates. |
 
 ## Inspect the running ROS graph
 
@@ -126,6 +174,22 @@ Expected demo topics include:
 - `/midas_depth_gray`
 - `/midas_yolo_overlay`
 
+## View the output in a browser
+
+`run_usb_demo.sh` starts two HTTP services by default:
+
+- IQ9 dashboard website on `0.0.0.0:8081`, showing `/image_raw`, `/midas_depth_gray`, and `/midas_yolo_overlay` together.
+- ROS 2 `web_video_server` on `0.0.0.0:8080`, serving the underlying MJPEG streams.
+
+Use the printed dashboard URL to watch the raw camera, MiDaS depth, and MiDaS + YOLO overlay from a laptop on the same network as the IQ9.
+
+If the dashboard cannot connect or a panel opens without frames:
+
+1. Confirm the laptop and IQ9 are on the same network.
+2. Open `http://<IQ9_LAN_IP>:8080/` and check that `/image_raw`, `/midas_depth_gray`, and `/midas_yolo_overlay` appear.
+3. Keep `qos_profile=sensor_data` in the stream URL for sensor-data image publishers.
+4. Check the logs printed by `run_usb_demo.sh` (defaults: `/tmp/iq9_web_dashboard.log` and `/tmp/iq9_web_video_server.log`).
+
 ## Model artifact
 
 The model is included in this repo:
@@ -147,6 +211,18 @@ The binary contains two QNN graphs in one shared context:
 | `midas` | MiDaS depth estimation |
 | `yolov11_seg` | YOLO11n segmentation |
 
+
+## Source overlays
+
+`prepare_demo_workspace.sh` builds these source packages into `/home/ubuntu/workshop/qrb_ros_samples/install`:
+
+| Package | Source | Reason |
+| --- | --- | --- |
+| `sample_midas_yolo_parallel` | `qualcomm-qrb-ros/qrb_ros_samples` PR #429 | Workshop demo package |
+| `qrb_inference_manager` / `qrb_ros_nn_inference` | `samfreund-qc/qrb_ros_nn_inference` commit `cb91917e3ce82ce5e5075c747e33825a29a58036` from PR #93 | Provides `qrb_ros::nn_inference::QrbRosSharedInferenceNode` |
+
+Do not run this demo against only the released `ros-jazzy-qrb-ros-nn-inference` package; that package currently registers `QrbRosInferenceNode` only.
+
 ## Troubleshooting
 
 | Symptom | Check | Fix |
@@ -155,11 +231,13 @@ The binary contains two QNN graphs in one shared context:
 | Model load fails | `ls -lh /opt/model/midas_yolo_combined_int8_split.bin` | Re-run prepare script; it stages the included model |
 | No camera | `v4l2-ctl --list-devices` | Plug camera, then pass `video_device:=/dev/videoX` |
 | No overlay topic | `ros2 topic list` | Confirm launch is still running and `/image_raw` exists |
+| `Failed to find class ... QrbRosSharedInferenceNode` | `ros2 component types | grep QrbRosSharedInferenceNode` | Re-run `./scripts/prepare_demo_workspace.sh`; it builds qrb_ros_nn_inference PR #93 into the overlay |
 | Low/no detections | Increase lighting, aim at common COCO-like objects, or adjust `score_thresh` |
 
 ## Upstream references
 
 - Demo PR: https://github.com/qualcomm-qrb-ros/qrb_ros_samples/pull/429
+- QRB ROS NN inference shared-context PR: https://github.com/qualcomm-qrb-ros/qrb_ros_nn_inference/pull/93
 - QRB ROS overview: https://dragonwingdocs.qualcomm.com/Ubuntu/robotics-workflows/qrb-ros-overview
 - QRB ROS NN inference: https://dragonwingdocs.qualcomm.com/Ubuntu/robotics-workflows/qrb-ros-nn-inference
 - QRB ROS transport: https://dragonwingdocs.qualcomm.com/Ubuntu/robotics-workflows/qrb-ros-transport
