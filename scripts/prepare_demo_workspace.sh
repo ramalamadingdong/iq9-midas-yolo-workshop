@@ -59,6 +59,9 @@ fi
 if [ ! -f "$REPO_ROOT/scripts/iq9_web_dashboard.py" ]; then
   echo "WARN: web dashboard script missing: $REPO_ROOT/scripts/iq9_web_dashboard.py" >&2
 fi
+if [ ! -f "$REPO_ROOT/scripts/detect_usb_camera.py" ]; then
+  echo "WARN: USB camera detector missing: $REPO_ROOT/scripts/detect_usb_camera.py" >&2
+fi
 colcon build --packages-select qrb_inference_manager qrb_ros_nn_inference sample_midas_yolo_parallel --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 echo "Demo workspace ready at $DEMO_REPO_DIR"

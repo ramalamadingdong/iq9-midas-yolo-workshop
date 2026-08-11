@@ -44,21 +44,11 @@ fi
 check "sample package visible" ros2 pkg prefix sample_midas_yolo_parallel
 check "web video server package visible" ros2 pkg prefix web_video_server
 check "web dashboard script present" test -f "$REPO_ROOT/scripts/iq9_web_dashboard.py"
+check "USB camera detector present" test -f "$REPO_ROOT/scripts/detect_usb_camera.py"
 check "shared inference component visible" bash -lc 'ros2 component types | python3 -c "import sys; sys.exit(0 if any(\"QrbRosSharedInferenceNode\" in line for line in sys.stdin) else 1)"'
 check "USB launch arguments parse" ros2 launch sample_midas_yolo_parallel launch_with_usb_cam.py --show-args
 
-usb_camera=$(python3 - <<'PY'
-from pathlib import Path
-
-for node in sorted(Path('/sys/class/video4linux').glob('video*')):
-    device = (node / 'device').resolve()
-    name_path = node / 'name'
-    name = name_path.read_text().strip() if name_path.exists() else ''
-    if '/usb' in str(device) and name:
-        print(f'/dev/{node.name} ({name})')
-        break
-PY
-)
+usb_camera=$(python3 "$REPO_ROOT/scripts/detect_usb_camera.py" --describe || true)
 if [ -n "$usb_camera" ]; then
   echo "PASS: USB camera detected at $usb_camera"
   v4l2-ctl --list-devices || true

@@ -122,18 +122,7 @@ for arg in "$@"; do
 done
 
 if [ "$has_video_device_arg" -eq 0 ]; then
-  detected_device=$(python3 - <<'PY'
-from pathlib import Path
-
-for node in sorted(Path('/sys/class/video4linux').glob('video*')):
-    device = (node / 'device').resolve()
-    name_path = node / 'name'
-    name = name_path.read_text().strip() if name_path.exists() else ''
-    if '/usb' in str(device) and name:
-        print('/dev/' + node.name)
-        break
-PY
-)
+  detected_device=$(python3 "$REPO_ROOT/scripts/detect_usb_camera.py" || true)
   if [ -n "$detected_device" ]; then
     echo "Auto-detected USB camera: $detected_device"
     set -- "video_device:=$detected_device" "$@"
