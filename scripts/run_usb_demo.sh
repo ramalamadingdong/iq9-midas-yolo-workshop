@@ -28,6 +28,7 @@ WEB_DASHBOARD="${WEB_DASHBOARD:-1}"
 WEB_DASHBOARD_PORT="${WEB_DASHBOARD_PORT:-8081}"
 WEB_DASHBOARD_LOG="${WEB_DASHBOARD_LOG:-/tmp/iq9_web_dashboard.log}"
 WEB_CAMERA_TOPIC="${WEB_CAMERA_TOPIC:-/image_raw}"
+WEB_CAMERA_QOS_PROFILE="${WEB_CAMERA_QOS_PROFILE:-default}"
 WEB_DEPTH_TOPIC="${WEB_DEPTH_TOPIC:-/midas_depth_gray}"
 web_viewer_pid=""
 web_dashboard_pid=""
@@ -96,6 +97,7 @@ start_web_dashboard() {
     --port "$WEB_DASHBOARD_PORT" \
     --video-port "$WEB_VIEWER_PORT" \
     --qos-profile "$WEB_VIEWER_QOS_PROFILE" \
+    --camera-qos-profile "$WEB_CAMERA_QOS_PROFILE" \
     --camera-topic "$WEB_CAMERA_TOPIC" \
     --depth-topic "$WEB_DEPTH_TOPIC" \
     --overlay-topic "$WEB_VIEWER_TOPIC" \

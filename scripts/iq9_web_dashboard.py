@@ -45,8 +45,9 @@ def stream_url(video_host: str, video_port: int, topic: str, qos_profile: str) -
 
 
 class FpsMonitor:
-    def __init__(self, topics: list[str], window_seconds: float = FPS_WINDOW_SECONDS) -> None:
+    def __init__(self, topics: list[str], reliable_topics: list[str], window_seconds: float = FPS_WINDOW_SECONDS) -> None:
         self._topics = list(dict.fromkeys(topics))
+        self._reliable_topics = set(reliable_topics)
         self._window_seconds = window_seconds
         self._samples: dict[str, deque[float]] = {topic: deque() for topic in self._topics}
         self._lock = threading.Lock()
@@ -63,7 +64,8 @@ class FpsMonitor:
                 rclpy.init(args=None)
             self._node = rclpy.create_node("iq9_web_dashboard_fps")
             for topic in self._topics:
-                self._node.create_subscription(Image, topic, self._callback_for(topic), qos_profile_sensor_data)
+                qos_profile = 10 if topic in self._reliable_topics else qos_profile_sensor_data
+                self._node.create_subscription(Image, topic, self._callback_for(topic), qos_profile)
             self._thread = threading.Thread(target=rclpy.spin, args=(self._node,), daemon=True)
             self._thread.start()
         except Exception as exc:  # Keep dashboard usable even if ROS graph is unavailable.
@@ -108,20 +110,21 @@ def render_dashboard(
     *,
     request_host: str,
     video_port: int,
-    qos_profile: str,
+    default_qos_profile: str,
+    camera_qos_profile: str,
     camera_topic: str,
     depth_topic: str,
     overlay_topic: str,
 ) -> bytes:
     video_host = request_host.split(":", 1)[0] or "127.0.0.1"
     streams = [
-        ("Camera", camera_topic, "Raw USB camera feed"),
-        ("MiDaS depth", depth_topic, "Grayscale depth output"),
-        ("MiDaS + YOLO", overlay_topic, "Detection/segmentation overlay"),
+        ("Camera", camera_topic, camera_qos_profile, "Raw USB camera feed"),
+        ("MiDaS depth", depth_topic, default_qos_profile, "Grayscale depth output"),
+        ("MiDaS + YOLO", overlay_topic, default_qos_profile, "Detection/segmentation overlay"),
     ]
     cards = []
-    for title, topic, description in streams:
-        src = stream_url(video_host, video_port, topic, qos_profile)
+    for title, topic, stream_qos_profile, description in streams:
+        src = stream_url(video_host, video_port, topic, stream_qos_profile)
         escaped_topic = html.escape(topic, quote=True)
         cards.append(
             f"""
@@ -173,7 +176,7 @@ def render_dashboard(
     {''.join(cards)}
   </main>
   <footer>
-    Stream source: <a href="http://{html.escape(video_host)}:{video_port}/">web_video_server</a> · QoS profile: <code>{html.escape(qos_profile)}</code> · Metrics: <code>/status</code>
+    Stream source: <a href="http://{html.escape(video_host)}:{video_port}/">web_video_server</a> · Camera QoS: <code>{html.escape(camera_qos_profile)}</code> · Output QoS: <code>{html.escape(default_qos_profile)}</code> · Metrics: <code>/status</code>
   </footer>
   <script>
     async function refreshFps() {{
@@ -215,7 +218,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             content = render_dashboard(
                 request_host=self.headers.get("Host", "127.0.0.1"),
                 video_port=self.server.video_port,
-                qos_profile=self.server.qos_profile,
+                default_qos_profile=self.server.default_qos_profile,
+                camera_qos_profile=self.server.camera_qos_profile,
                 camera_topic=self.server.camera_topic,
                 depth_topic=self.server.depth_topic,
                 overlay_topic=self.server.overlay_topic,
@@ -251,7 +255,8 @@ class DashboardServer(ThreadingHTTPServer):
         handler_class: type[BaseHTTPRequestHandler],
         *,
         video_port: int,
-        qos_profile: str,
+        default_qos_profile: str,
+        camera_qos_profile: str,
         camera_topic: str,
         depth_topic: str,
         overlay_topic: str,
@@ -259,7 +264,8 @@ class DashboardServer(ThreadingHTTPServer):
     ) -> None:
         super().__init__(server_address, handler_class)
         self.video_port = video_port
-        self.qos_profile = qos_profile
+        self.default_qos_profile = default_qos_profile
+        self.camera_qos_profile = camera_qos_profile
         self.camera_topic = camera_topic
         self.depth_topic = depth_topic
         self.overlay_topic = overlay_topic
@@ -272,6 +278,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8081)
     parser.add_argument("--video-port", type=int, default=8080)
     parser.add_argument("--qos-profile", default="sensor_data")
+    parser.add_argument("--camera-qos-profile", default="default")
     parser.add_argument("--camera-topic", default=DEFAULT_CAMERA_TOPIC)
     parser.add_argument("--depth-topic", default=DEFAULT_DEPTH_TOPIC)
     parser.add_argument("--overlay-topic", default=DEFAULT_OVERLAY_TOPIC)
@@ -280,13 +287,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    fps_monitor = FpsMonitor([args.camera_topic, args.depth_topic, args.overlay_topic])
+    fps_monitor = FpsMonitor([args.camera_topic, args.depth_topic, args.overlay_topic], reliable_topics=[args.camera_topic])
     fps_monitor.start()
     server = DashboardServer(
         (args.address, args.port),
         DashboardHandler,
         video_port=args.video_port,
-        qos_profile=args.qos_profile,
+        default_qos_profile=args.qos_profile,
+        camera_qos_profile=args.camera_qos_profile,
         camera_topic=args.camera_topic,
         depth_topic=args.depth_topic,
         overlay_topic=args.overlay_topic,

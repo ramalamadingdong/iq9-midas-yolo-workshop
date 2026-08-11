@@ -112,7 +112,7 @@ When the demo starts, it prints a dashboard URL like:
 http://<IQ9_LAN_IP>:8081/
 ```
 
-Open that URL from any machine on the same network to see a live website with three streams and per-topic FPS: raw camera (`/image_raw`), MiDaS depth (`/midas_depth_gray`), and MiDaS + YOLO overlay (`/midas_yolo_overlay`). The dashboard embeds `web_video_server` streams with `qos_profile=sensor_data` for camera/image publishers. The underlying stream server is still available at:
+Open that URL from any machine on the same network to see a live website with three streams and per-topic FPS: raw camera (`/image_raw`), MiDaS depth (`/midas_depth_gray`), and MiDaS + YOLO overlay (`/midas_yolo_overlay`). The dashboard uses default/reliable QoS for the `usb_cam` camera stream and `sensor_data` QoS for MiDaS/YOLO output streams. The underlying stream server is still available at:
 
 ```text
 http://<IQ9_LAN_IP>:8080/
@@ -125,6 +125,7 @@ WEB_VIEWER=0 ./scripts/run_usb_demo.sh                         # disable HTTP ou
 WEB_DASHBOARD_PORT=8082 ./scripts/run_usb_demo.sh              # change the dashboard website port
 WEB_VIEWER_PORT=8090 ./scripts/run_usb_demo.sh                 # change the ROS image stream port
 WEB_CAMERA_TOPIC=/image_raw ./scripts/run_usb_demo.sh          # change the camera panel topic
+WEB_CAMERA_QOS_PROFILE=sensor_data ./scripts/run_usb_demo.sh  # change the camera stream QoS query
 WEB_DEPTH_TOPIC=/midas_depth_gray ./scripts/run_usb_demo.sh    # change the depth panel topic
 WEB_VIEWER_TOPIC=/midas_yolo_overlay ./scripts/run_usb_demo.sh # change the overlay panel topic
 WEB_VIEWER_QOS_PROFILE=default ./scripts/run_usb_demo.sh       # change stream QoS query
@@ -189,7 +190,7 @@ If the dashboard cannot connect or a panel opens without frames:
 
 1. Confirm the laptop and IQ9 are on the same network.
 2. Open `http://<IQ9_LAN_IP>:8080/` and check that `/image_raw`, `/midas_depth_gray`, and `/midas_yolo_overlay` appear.
-3. Keep `qos_profile=sensor_data` in the stream URL for sensor-data image publishers.
+3. Keep the default camera QoS for `/image_raw`; use `qos_profile=sensor_data` for MiDaS/YOLO output image publishers.
 4. Check the logs printed by `run_usb_demo.sh` (defaults: `/tmp/iq9_web_dashboard.log` and `/tmp/iq9_web_video_server.log`).
 
 ## Model artifact
