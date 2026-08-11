@@ -133,6 +133,18 @@ if [ "$has_video_device_arg" -eq 0 ]; then
   fi
 fi
 
+has_score_thresh_arg=0
+for arg in "$@"; do
+  if [[ "$arg" == score_thresh:=* ]]; then
+    has_score_thresh_arg=1
+    break
+  fi
+done
+
+if [ "$has_score_thresh_arg" -eq 0 ]; then
+  set -- "score_thresh:=0.5" "$@"
+fi
+
 start_web_viewer
 start_web_dashboard
 
