@@ -23,11 +23,13 @@ try:
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
+    from std_msgs.msg import Float32
     from sensor_msgs.msg import Image
 except ImportError:  # Dashboard still serves static streams if ROS Python is unavailable.
     rclpy = None  # type: ignore[assignment]
     Node = object  # type: ignore[assignment,misc]
     qos_profile_sensor_data = 10  # type: ignore[assignment]
+    Float32 = object  # type: ignore[assignment,misc]
     Image = object  # type: ignore[assignment,misc]
 
 
@@ -45,11 +47,14 @@ def stream_url(video_host: str, video_port: int, topic: str, qos_profile: str) -
 
 
 class FpsMonitor:
-    def __init__(self, topics: list[str], reliable_topics: list[str], window_seconds: float = FPS_WINDOW_SECONDS) -> None:
+    def __init__(self, topics: list[str], reliable_topics: list[str], pipeline_topic: str, window_seconds: float = FPS_WINDOW_SECONDS) -> None:
         self._topics = list(dict.fromkeys(topics))
         self._reliable_topics = set(reliable_topics)
+        self._pipeline_topic = pipeline_topic
         self._window_seconds = window_seconds
         self._samples: dict[str, deque[float]] = {topic: deque() for topic in self._topics}
+        self._pipeline_fps: float | None = None
+        self._pipeline_updated_at: float | None = None
         self._lock = threading.Lock()
         self._node: Node | None = None
         self._thread: threading.Thread | None = None
@@ -66,6 +71,7 @@ class FpsMonitor:
             for topic in self._topics:
                 qos_profile = 10 if topic in self._reliable_topics else qos_profile_sensor_data
                 self._node.create_subscription(Image, topic, self._callback_for(topic), qos_profile)
+            self._node.create_subscription(Float32, self._pipeline_topic, self._pipeline_callback, 10)
             self._thread = threading.Thread(target=rclpy.spin, args=(self._node,), daemon=True)
             self._thread.start()
         except Exception as exc:  # Keep dashboard usable even if ROS graph is unavailable.
@@ -82,6 +88,11 @@ class FpsMonitor:
                     samples.popleft()
 
         return callback
+
+    def _pipeline_callback(self, msg: Float32) -> None:
+        with self._lock:
+            self._pipeline_fps = float(msg.data)
+            self._pipeline_updated_at = time.monotonic()
 
     def snapshot(self) -> dict[str, Any]:
         now = time.monotonic()
@@ -103,7 +114,13 @@ class FpsMonitor:
                     "frames": len(samples),
                     "last_age_seconds": None if age is None else round(age, 2),
                 }
-        return {"ok": not self._error, "error": self._error, "topics": topics}
+            pipeline_age = None if self._pipeline_updated_at is None else round(now - self._pipeline_updated_at, 2)
+            pipeline = {
+                "topic": self._pipeline_topic,
+                "fps": None if self._pipeline_fps is None else round(self._pipeline_fps, 1),
+                "last_age_seconds": pipeline_age,
+            }
+        return {"ok": not self._error, "error": self._error, "pipeline": pipeline, "topics": topics}
 
 
 def render_dashboard(
@@ -162,6 +179,9 @@ def render_dashboard(
     .fps {{ flex: 0 0 auto; border: 1px solid #3b638c; border-radius: 999px; padding: .25rem .6rem; background: #07111e; color: #bfe7ff; font-weight: 700; font-variant-numeric: tabular-nums; }}
     .fps.stale {{ color: #ffd38b; border-color: #8c6b3b; }}
     .card p {{ margin: .4rem 1rem 1rem; color: #b9c7d9; }}
+    .pipeline {{ display: inline-flex; align-items: baseline; gap: .45rem; margin-top: .8rem; border: 1px solid #8bd3ff; border-radius: 999px; padding: .45rem .8rem; background: rgba(7, 17, 30, .75); font-weight: 800; }}
+    .pipeline span {{ color: #8bd3ff; font-size: 1.25rem; font-variant-numeric: tabular-nums; }}
+    .pipeline.stale span {{ color: #ffd38b; }}
     img {{ display: block; width: 100%; min-height: 240px; max-height: 70vh; object-fit: contain; background: #03070d; }}
     footer {{ padding: 0 1rem 1rem; color: #b9c7d9; font-size: .9rem; }}
     a {{ color: #8bd3ff; }}
@@ -170,7 +190,8 @@ def render_dashboard(
 <body>
   <header>
     <h1>IQ9 MiDaS + YOLO Live Output</h1>
-    <p>Live USB camera, MiDaS depth, YOLO overlay, and per-topic processing FPS.</p>
+    <p>Live USB camera, MiDaS depth, YOLO overlay, and true fused-pipeline FPS.</p>
+    <div id="pipeline-fps" class="pipeline">Pipeline <span>-- FPS</span></div>
   </header>
   <main>
     {''.join(cards)}
@@ -183,6 +204,15 @@ def render_dashboard(
       try {{
         const response = await fetch('/status', {{cache: 'no-store'}});
         const payload = await response.json();
+        const pipeline = payload.pipeline;
+        const pipelineElement = document.getElementById('pipeline-fps');
+        if (pipeline && pipeline.fps !== null) {{
+          pipelineElement.querySelector('span').textContent = `${{pipeline.fps.toFixed(1)}} FPS`;
+          pipelineElement.classList.toggle('stale', pipeline.last_age_seconds > 3.0);
+        }} else {{
+          pipelineElement.querySelector('span').textContent = '-- FPS';
+          pipelineElement.classList.add('stale');
+        }}
         document.querySelectorAll('[data-topic]').forEach((element) => {{
           const topic = element.dataset.topic;
           const metric = payload.topics[topic];
@@ -287,7 +317,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    fps_monitor = FpsMonitor([args.camera_topic, args.depth_topic, args.overlay_topic], reliable_topics=[args.camera_topic])
+    fps_monitor = FpsMonitor([args.camera_topic, args.depth_topic, args.overlay_topic], reliable_topics=[args.camera_topic], pipeline_topic="/midas_yolo_pipeline_fps")
     fps_monitor.start()
     server = DashboardServer(
         (args.address, args.port),
