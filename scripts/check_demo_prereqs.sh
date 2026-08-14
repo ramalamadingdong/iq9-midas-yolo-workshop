@@ -51,10 +51,10 @@ check "USB launch arguments parse" ros2 launch sample_midas_yolo_parallel launch
 usb_camera=$(python3 "$REPO_ROOT/scripts/detect_usb_camera.py" --describe || true)
 if [ -n "$usb_camera" ]; then
   echo "PASS: USB camera detected at $usb_camera"
-  v4l2-ctl --list-devices || true
+  v4l2-ctl --list-devices 2>/dev/null || true
 elif compgen -G '/dev/video*' >/dev/null; then
   echo "WARN: V4L video nodes exist, but no USB camera was identified"
-  v4l2-ctl --list-devices || true
+  v4l2-ctl --list-devices 2>/dev/null || true
 else
   echo "WARN: no /dev/video* devices found; plug the USB camera before the live demo"
 fi
